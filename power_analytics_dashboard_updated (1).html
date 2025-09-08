@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Analytics Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.1em;
+        }
+
+        .upload-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .file-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .axis {
+            font-size: 12px;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #ccc;
+            shape-rendering: crispEdges;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-size: 0.9em;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+
+        .metric-tooltip {
+            position: fixed;
+            background: rgba(0,0,0,0.92);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 7px;
+            font-size: 13px;
+            pointer-events: none;
+            z-index: 9999;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            max-width: 260px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>⚡ Power Analytics Dashboard</h1>
+            <p>Advanced IoT Power Monitoring & Analytics Platform</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="file-upload">
+                <div class="file-input-wrapper">
+                    <input type="file" id="csvFile" accept=".csv" />
+                    <label for="csvFile" class="file-input-label">
+                        📊 Upload CSV File
+                    </label>
+                </div>
+                <div class="file-status" id="fileStatus">
+                    No file selected
+                </div>
+            </div>
+            
+            <div class="filters" id="filters" style="display: none;">
+                <div class="filter-group">
+                    <label for="nodeFilter">Node:</label>
+                    <select id="nodeFilter">
+                        <option value="">All Nodes</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="channelFilter">Channel:</label>
+                    <select id="channelFilter">
+                        <option value="">All Channels</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="dateFilter">Date Range:</label>
+                    <select id="dateFilter">
+                        <option value="">All Dates</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboard" style="display: none;">
+            <div class="metrics-grid" id="metricsGrid">
+                <!-- Metrics will be populated here -->
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Total Energy Consumption Over Time</div>
+                    <div id="powerChart"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Average Voltage and Current by Hour</div>
+                    <div id="voltageCurrentChart"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Daily Power Factor Trend</div>
+                    <div id="powerFactorChart"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Hourly Voltage Stability</div>
+                    <div id="energyChart"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing your data...</p>
+        </div>
+    </div>
+
+    <script>
+        let data = [];
+        let filteredData = [];
+        
+        // Initialize with sample data
+        const sampleData = [
+            {
+                "Column1._id.$oid": "67a5c8924079e22bd480de28",
+                "Column1.timestamp": "2025-02-07T08:47:11.889Z",
+                "Column1.node_name": "Node-Demo2",
+                "Column1.node_id": "Node-D2",
+                "Column1.channel": "4",
+                "Column1.power_metrics.voltage": "235.6",
+                "Column1.power_metrics.current": "0.29",
+                "Column1.power_metrics.power": "38.7",
+                "Column1.power_metrics.energy": "72.44",
+                "Column1.power_metrics.pf": "0.56",
+                "Column1.power_metrics.apparent_power": "68.8",
+                "Column1.power_metrics.reactive_power": "-39.1",
+                "timestamp_utc": "2025-02-07 08:47:11.889000+00:00",
+                "timestamp_ist": "2025-02-07 14:17:11.889000+05:30",
+                "Date_IST": "07-02-2025",
+                "time": "17:11.9",
+                "year": "2025",
+                "month": "2.0",
+                "day": "7.0"
+            }
+        ];
+
+        // File upload handling
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileStatus').textContent = `Selected: ${file.name}`;
+                document.getElementById('loading').style.display = 'block';
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const csv = e.target.result;
+                    parseCSV(csv);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        function parseCSV(csv) {
+            const lines = csv.split('\n');
+            const headers = lines[0].split(',');
+            const parsed = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = lines[i].split(',');
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header.trim()] = values[index] ? values[index].trim() : '';
+                    });
+                    parsed.push(row);
+                }
+            }
+
+            data = parsed;
+            filteredData = [...data];
+            
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+                initializeDashboard();
+            }, 1000);
+        }
+
+        function initializeDashboard() {
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('filters').style.display = 'flex';
+            
+            setupFilters();
+            updateMetrics();
+            createCharts();
+        }
+
+        function setupFilters() {
+            const nodes = [...new Set(data.map(d => d['Column1.node_name'] || d.node_name))];
+            const channels = [...new Set(data.map(d => d['Column1.channel'] || d.channel))];
+            const dates = [...new Set(data.map(d => d['Date_IST'] || d.date))];
+
+            const nodeFilter = document.getElementById('nodeFilter');
+            const channelFilter = document.getElementById('channelFilter');
+            const dateFilter = document.getElementById('dateFilter');
+
+            nodes.forEach(node => {
+                if (node) {
+                    const option = document.createElement('option');
+                    option.value = node;
+                    option.textContent = node;
+                    nodeFilter.appendChild(option);
+                }
+            });
+
+            channels.forEach(channel => {
+                if (channel) {
+                    const option = document.createElement('option');
+                    option.value = channel;
+                    option.textContent = `Channel ${channel}`;
+                    channelFilter.appendChild(option);
+                }
+            });
+
+            dates.forEach(date => {
+                if (date) {
+                    const option = document.createElement('option');
+                    option.value = date;
+                    option.textContent = date;
+                    dateFilter.appendChild(option);
+                }
+            });
+
+            // Add event listeners
+            [nodeFilter, channelFilter, dateFilter].forEach(filter => {
+                filter.addEventListener('change', applyFilters);
+            });
+        }
+
+        function applyFilters() {
+            const nodeFilter = document.getElementById('nodeFilter').value;
+            const channelFilter = document.getElementById('channelFilter').value;
+            const dateFilter = document.getElementById('dateFilter').value;
+
+            filteredData = data.filter(d => {
+                const node = d['Column1.node_name'] || d.node_name;
+                const channel = d['Column1.channel'] || d.channel;
+                const date = d['Date_IST'] || d.date;
+
+                return (!nodeFilter || node === nodeFilter) &&
+                       (!channelFilter || channel === channelFilter) &&
+                       (!dateFilter || date === dateFilter);
+            });
+
+            updateMetrics();
+            createCharts();
+        }
+
+        function updateMetrics() {
+            const metrics = calculateMetrics(filteredData);
+            const metricsGrid = document.getElementById('metricsGrid');
+            
+            metricsGrid.innerHTML = `
+                <div class="metric-card" data-tooltip="Total number of records in the filtered dataset.">
+                    <div class="metric-value">${metrics.totalRecords}</div>
+                    <div class="metric-label">Total Records</div>
+                </div>
+                <div class="metric-card" data-tooltip="Average power consumption (W) over the selected period.">
+                    <div class="metric-value">${metrics.avgPower.toFixed(1)}W</div>
+                    <div class="metric-label">Avg Power</div>
+                </div>
+                <div class="metric-card" data-tooltip="Average voltage (V) over the selected period.">
+                    <div class="metric-value">${metrics.avgVoltage.toFixed(1)}V</div>
+                    <div class="metric-label">Avg Voltage</div>
+                </div>
+                <div class="metric-card" data-tooltip="Average current (A) over the selected period.">
+                    <div class="metric-value">${metrics.avgCurrent.toFixed(2)}A</div>
+                    <div class="metric-label">Avg Current</div>
+                </div>
+                <div class="metric-card" data-tooltip="Total energy (Wh) consumed over the selected period.">
+                    <div class="metric-value">${metrics.totalEnergy.toFixed(1)}kWh</div>
+                    <div class="metric-label">Total Energy</div>
+                </div>
+                <div class="metric-card" data-tooltip="Average power factor (ratio of real to apparent power) over the selected period.">
+                    <div class="metric-value">${metrics.avgPowerFactor.toFixed(2)}</div>
+                    <div class="metric-label">Avg Power Factor</div>
+                </div>
+            `;
+        }
+
+        function calculateMetrics(data) {
+            if (data.length === 0) return { totalRecords: 0, avgPower: 0, avgVoltage: 0, avgCurrent: 0, totalEnergy: 0, avgPowerFactor: 0 };
+
+            const power = data.map(d => parseFloat(d['Column1.power_metrics.power'] || d.power || 0));
+            const voltage = data.map(d => parseFloat(d['Column1.power_metrics.voltage'] || d.voltage || 0));
+            const current = data.map(d => parseFloat(d['Column1.power_metrics.current'] || d.current || 0));
+            const energy = data.map(d => parseFloat(d['Column1.power_metrics.energy'] || d.energy || 0));
+            const pf = data.map(d => parseFloat(d['Column1.power_metrics.pf'] || d.pf || 0));
+
+            return {
+                totalRecords: data.length,
+                avgPower: power.reduce((a, b) => a + b, 0) / power.length,
+                avgVoltage: voltage.reduce((a, b) => a + b, 0) / voltage.length,
+                avgCurrent: current.reduce((a, b) => a + b, 0) / current.length,
+                totalEnergy: energy.reduce((a, b) => a + b, 0),
+                avgPowerFactor: pf.reduce((a, b) => a + b, 0) / pf.length
+            };
+        }
+
+        function createCharts() {
+            createDailyEnergyChart();
+            createHourlyPowerChart();
+            createPowerConsumptionChart();
+            createVoltageStabilityChart();
+        }
+
+        function createDailyEnergyChart() {
+            const container = d3.select('#powerChart');
+            container.selectAll('*').remove();
+
+            const margin = { top: 40, right: 40, bottom: 80, left: 90 };
+            const width = 650 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Group data by date and calculate daily energy
+            const dailyData = d3.group(filteredData, d => d['Date_IST'] || d.date);
+            const chartData = Array.from(dailyData, ([date, values]) => ({
+                date: date,
+                energy: d3.sum(values, d => {
+                    let val = d['Column1.power_metrics.energy'];
+                    if (val === undefined || val === null || val === '') val = d.energy;
+                    return parseFloat(val) || 0;
+                }) / 1000 // Convert to kWh
+            })).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            console.log('DailyEnergyChart data:', chartData);
+            if (chartData.length === 0) return;
+
+            const xScale = d3.scaleBand()
+                .domain(chartData.map(d => d.date))
+                .range([0, width])
+                .padding(0.1);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(chartData, d => d.energy) * 1.1])
+                .range([height, 0]);
+
+            // Add grid lines
+            svg.append('g')
+                .attr('class', 'grid')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickSize(-height).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            svg.append('g')
+                .attr('class', 'grid')
+                .call(d3.axisLeft(yScale).tickSize(-width).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            // Add axes
+            svg.append('g')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll('text')
+                .style('text-anchor', 'end')
+                .attr('dx', '-.8em')
+                .attr('dy', '.15em')
+                .attr('transform', 'rotate(-45)')
+                .style('font-size', '16px');
+
+            svg.append('g')
+                .call(d3.axisLeft(yScale))
+                .selectAll('text')
+                .style('font-size', '16px');
+
+            // Add line with gradient
+            const gradient = svg.append('defs')
+                .append('linearGradient')
+                .attr('id', 'lineGradient')
+                .attr('gradientUnits', 'userSpaceOnUse')
+                .attr('x1', 0).attr('y1', height)
+                .attr('x2', 0).attr('y2', 0);
+
+            gradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', '#667eea')
+                .attr('stop-opacity', 0.1);
+
+            gradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', '#667eea')
+                .attr('stop-opacity', 0.8);
+
+            const line = d3.line()
+                .x(d => xScale(d.date) + xScale.bandwidth() / 2)
+                .y(d => yScale(d.energy))
+                .curve(d3.curveMonotoneX);
+
+            const area = d3.area()
+                .x(d => xScale(d.date) + xScale.bandwidth() / 2)
+                .y0(height)
+                .y1(d => yScale(d.energy))
+                .curve(d3.curveMonotoneX);
+
+            svg.append('path')
+                .datum(chartData)
+                .attr('fill', 'url(#lineGradient)')
+                .attr('d', area);
+
+            svg.append('path')
+                .datum(chartData)
+                .attr('fill', 'none')
+                .attr('stroke', '#667eea')
+                .attr('stroke-width', 5)
+                .attr('d', line);
+
+            // Add interactive dots
+            svg.selectAll('.dot')
+                .data(chartData)
+                .enter().append('circle')
+                .attr('class', 'dot')
+                .attr('cx', d => xScale(d.date) + xScale.bandwidth() / 2)
+                .attr('cy', d => yScale(d.energy))
+                .attr('r', 8)
+                .attr('fill', '#667eea')
+                .attr('stroke', 'white')
+                .attr('stroke-width', 3)
+                .on('mouseover', function(event, d, i) {
+                    d3.select(this).attr('r', 12);
+                    let prev = i > 0 ? chartData[i-1] : null;
+                    let diff = prev ? d.energy - prev.energy : null;
+                    let diffStr = '';
+                    if (diff !== null) {
+                        let arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '→');
+                        let color = diff > 0 ? 'green' : (diff < 0 ? 'red' : '#888');
+                        diffStr = `<br><span style='color:${color}'>${arrow} ${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:2})} kWh vs. previous</span>`;
+                    }
+                    showTooltip(event, `Date: ${d.date}<br>Energy: ${d.energy.toLocaleString(undefined, {maximumFractionDigits:2})} kWh${diffStr}`);
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('r', 8);
+                    hideTooltip();
+                });
+
+            // Add Y-axis label
+            svg.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('y', 0 - margin.left + 10)
+                .attr('x', 0 - (height / 2))
+                .attr('dy', '1em')
+                .style('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text('Energy (kWh)');
+        }
+
+        function createHourlyPowerChart() {
+            const container = d3.select('#voltageCurrentChart');
+            container.selectAll('*').remove();
+
+            const margin = { top: 40, right: 40, bottom: 80, left: 90 };
+            const width = 650 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Extract hour from timestamp and group data
+            const hourlyData = d3.group(filteredData, d => {
+                const time = d['time'] || d.time || '0:0';
+                const hour = parseInt(time.split(':')[0]) || 0;
+                return hour;
+            });
+
+            const chartData = Array.from(hourlyData, ([hour, values]) => ({
+                hour: hour,
+                avgPower: d3.mean(values, d => {
+                    let val = d['Column1.power_metrics.power'];
+                    if (val === undefined || val === null || val === '') val = d.power;
+                    return parseFloat(val) || 0;
+                })
+            })).sort((a, b) => a.hour - b.hour);
+
+            console.log('HourlyPowerChart data:', chartData);
+            if (chartData.length === 0) return;
+
+            const xScale = d3.scaleLinear()
+                .domain([0, 23])
+                .range([0, width]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(chartData, d => d.avgPower) * 1.1])
+                .range([height, 0]);
+
+            // Add grid lines
+            svg.append('g')
+                .attr('class', 'grid')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickSize(-height).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            svg.append('g')
+                .attr('class', 'grid')
+                .call(d3.axisLeft(yScale).tickSize(-width).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            // Add axes
+            svg.append('g')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickFormat(d => d + ':00'))
+                .selectAll('text')
+                .style('font-size', '16px');
+
+            svg.append('g')
+                .call(d3.axisLeft(yScale))
+                .selectAll('text')
+                .style('font-size', '16px');
+
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.hour))
+                .y(d => yScale(d.avgPower))
+                .curve(d3.curveMonotoneX);
+
+            // Add line with shadow effect
+            svg.append('path')
+                .datum(chartData)
+                .attr('fill', 'none')
+                .attr('stroke', '#667eea')
+                .attr('stroke-width', 5)
+                .attr('d', line)
+                .attr('filter', 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1))');
+
+            // Add interactive dots
+            svg.selectAll('.dot')
+                .data(chartData)
+                .enter().append('circle')
+                .attr('class', 'dot')
+                .attr('cx', d => xScale(d.hour))
+                .attr('cy', d => yScale(d.avgPower))
+                .attr('r', 8)
+                .attr('fill', '#667eea')
+                .attr('stroke', 'white')
+                .attr('stroke-width', 3)
+                .on('mouseover', function(event, d, i) {
+                    d3.select(this).attr('r', 12);
+                    let prev = i > 0 ? chartData[i-1] : null;
+                    let diff = prev ? d.avgPower - prev.avgPower : null;
+                    let diffStr = '';
+                    if (diff !== null) {
+                        let arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '→');
+                        let color = diff > 0 ? 'green' : (diff < 0 ? 'red' : '#888');
+                        diffStr = `<br><span style='color:${color}'>${arrow} ${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:2})} W vs. previous</span>`;
+                    }
+                    showTooltip(event, `Hour: ${d.hour}:00<br/>Avg Power: ${d.avgPower.toLocaleString(undefined, {maximumFractionDigits:2})} W${diffStr}`);
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('r', 8);
+                    hideTooltip();
+                });
+
+            // Add Y-axis label
+            svg.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('y', 0 - margin.left + 10)
+                .attr('x', 0 - (height / 2))
+                .attr('dy', '1em')
+                .style('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text('Avg Power (W)');
+
+            // Add X-axis label
+            svg.append('text')
+                .attr('transform', `translate(${width/2}, ${height + margin.bottom - 30})`)
+                .style('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text('Hour of Day');
+
+            let seriesVisibility = { voltage: true, current: true };
+            function updateHourlyPowerChart() {
+                svg.selectAll('.line-series').remove();
+                svg.selectAll('.dot-series').remove();
+                if (seriesVisibility.voltage) {
+                    const validChartData = chartData.filter(d => !isNaN(d.avgVoltage));
+                    svg.append('path')
+                        .datum(validChartData)
+                        .attr('class', 'line-series')
+                        .attr('fill', 'none')
+                        .attr('stroke', '#667eea')
+                        .attr('stroke-width', 5)
+                        .attr('d', d3.line()
+                            .defined(d => !isNaN(d.avgVoltage))
+                            .x(d => xScale(d.hour))
+                            .y(d => yScale(d.avgVoltage))
+                        );
+                    svg.selectAll('.dot-voltage')
+                        .data(validChartData.filter(d => !isNaN(d.avgVoltage)))
+                        .enter().append('circle')
+                        .attr('class', 'dot-series dot-voltage')
+                        .attr('cx', d => xScale(d.hour))
+                        .attr('cy', d => yScale(d.avgVoltage))
+                        .attr('r', 8)
+                        .attr('fill', '#667eea')
+                        .on('mouseover', function(event, d, i) {
+                            d3.select(this).attr('r', 12);
+                            let prev = i > 0 ? validChartData[i-1] : null;
+                            let diff = prev ? d.avgVoltage - prev.avgVoltage : null;
+                            let diffStr = '';
+                            if (diff !== null) {
+                                let arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '→');
+                                let color = diff > 0 ? 'green' : (diff < 0 ? 'red' : '#888');
+                                diffStr = `<br><span style='color:${color}'>${arrow} ${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:2})} V vs. previous</span>`;
+                            }
+                            showTooltip(event, `Hour: ${d.hour}:00<br/>Avg Voltage: ${d.avgVoltage.toLocaleString(undefined, {maximumFractionDigits:2})} V${diffStr}`);
+                        })
+                        .on('mouseout', function() {
+                            d3.select(this).attr('r', 8);
+                            hideTooltip();
+                        });
+                }
+                if (seriesVisibility.current) {
+                    const validChartData = chartData.filter(d => !isNaN(d.avgCurrent));
+                    svg.append('path')
+                        .datum(validChartData)
+                        .attr('class', 'line-series')
+                        .attr('fill', 'none')
+                        .attr('stroke', '#ff7f0e')
+                        .attr('stroke-width', 5)
+                        .attr('d', d3.line()
+                            .defined(d => !isNaN(d.avgCurrent))
+                            .x(d => xScale(d.hour))
+                            .y(d => yScale(d.avgCurrent))
+                        );
+                    svg.selectAll('.dot-current')
+                        .data(validChartData.filter(d => !isNaN(d.avgCurrent)))
+                        .enter().append('circle')
+                        .attr('class', 'dot-series dot-current')
+                        .attr('cx', d => xScale(d.hour))
+                        .attr('cy', d => yScale(d.avgCurrent))
+                        .attr('r', 8)
+                        .attr('fill', '#ff7f0e')
+                        .on('mouseover', function(event, d, i) {
+                            d3.select(this).attr('r', 12);
+                            let prev = i > 0 ? validChartData[i-1] : null;
+                            let diff = prev ? d.avgCurrent - prev.avgCurrent : null;
+                            let diffStr = '';
+                            if (diff !== null) {
+                                let arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '→');
+                                let color = diff > 0 ? 'green' : (diff < 0 ? 'red' : '#888');
+                                diffStr = `<br><span style='color:${color}'>${arrow} ${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:2})} A vs. previous</span>`;
+                            }
+                            showTooltip(event, `Hour: ${d.hour}:00<br/>Avg Current: ${d.avgCurrent.toLocaleString(undefined, {maximumFractionDigits:2})} A${diffStr}`);
+                        })
+                        .on('mouseout', function() {
+                            d3.select(this).attr('r', 8);
+                            hideTooltip();
+                        });
+                }
+            }
+
+            // Draw the legend
+            const legend = svg.append('g').attr('transform', `translate(${width - 120}, 10)`);
+            const legendData = [
+                { label: 'Avg Voltage', color: '#667eea', key: 'voltage' },
+                { label: 'Avg Current', color: '#ff7f0e', key: 'current' }
+            ];
+            legend.selectAll('rect')
+                .data(legendData)
+                .enter().append('rect')
+                .attr('x', 0)
+                .attr('y', (d, i) => i * 32)
+                .attr('width', 24)
+                .attr('height', 24)
+                .attr('fill', d => d.color)
+                .attr('stroke', d => seriesVisibility[d.key] ? d.color : '#ccc')
+                .attr('stroke-width', 3)
+                .style('cursor', 'pointer')
+                .on('click', function(event, d) {
+                    seriesVisibility[d.key] = !seriesVisibility[d.key];
+                    d3.select(this).attr('stroke', seriesVisibility[d.key] ? d.color : '#ccc');
+                    updateHourlyPowerChart();
+                });
+            legend.selectAll('text')
+                .data(legendData)
+                .enter().append('text')
+                .attr('x', 32)
+                .attr('y', (d, i) => i * 32 + 18)
+                .text(d => d.label)
+                .style('font-size', '18px')
+                .style('fill', '#333')
+                .style('cursor', 'pointer')
+                .on('click', function(event, d) {
+                    seriesVisibility[d.key] = !seriesVisibility[d.key];
+                    legend.selectAll('rect').filter(ld => ld.key === d.key)
+                        .attr('stroke', seriesVisibility[d.key] ? d.color : '#ccc');
+                    updateHourlyPowerChart();
+                });
+
+            // Initial draw
+            updateHourlyPowerChart();
+        }
+
+        function createPowerConsumptionChart() {
+            const container = d3.select('#powerFactorChart');
+            container.selectAll('*').remove();
+
+            const margin = { top: 40, right: 40, bottom: 80, left: 90 };
+            const width = 650 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Group data by date
+            const dailyData = d3.group(filteredData, d => d['Date_IST'] || d.date);
+            const chartData = Array.from(dailyData, ([date, values]) => ({
+                date: date,
+                power: d3.sum(values, d => {
+                    let val = d['Column1.power_metrics.power'];
+                    if (val === undefined || val === null || val === '') val = d.power;
+                    return parseFloat(val) || 0;
+                })
+            })).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            console.log('PowerConsumptionChart data:', chartData);
+            if (chartData.length === 0) return;
+
+            const xScale = d3.scaleBand()
+                .domain(chartData.map(d => d.date))
+                .range([0, width])
+                .padding(0.1);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(chartData, d => d.power) * 1.1])
+                .range([height, 0]);
+
+            // Add gradient definition
+            const gradient = svg.append('defs')
+                .append('linearGradient')
+                .attr('id', 'barGradient')
+                .attr('gradientUnits', 'userSpaceOnUse')
+                .attr('x1', 0).attr('y1', height)
+                .attr('x2', 0).attr('y2', 0);
+
+            gradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', '#ff9500')
+                .attr('stop-opacity', 0.8);
+
+            gradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', '#ffb347')
+                .attr('stop-opacity', 1);
+
+            // Add grid lines
+            svg.append('g')
+                .attr('class', 'grid')
+                .call(d3.axisLeft(yScale).tickSize(-width).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            // Add axes
+            svg.append('g')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll('text')
+                .style('text-anchor', 'end')
+                .attr('dx', '-.8em')
+                .attr('dy', '.15em')
+                .attr('transform', 'rotate(-45)')
+                .style('font-size', '16px');
+
+            svg.append('g')
+                .call(d3.axisLeft(yScale))
+                .selectAll('text')
+                .style('font-size', '16px');
+
+            // Add bars with animation
+            svg.selectAll('.bar')
+                .data(chartData)
+                .enter().append('rect')
+                .attr('class', 'bar')
+                .attr('x', d => xScale(d.date))
+                .attr('width', xScale.bandwidth())
+                .attr('y', height)
+                .attr('height', 0)
+                .attr('fill', 'url(#barGradient)')
+                .attr('stroke', '#ff9500')
+                .attr('stroke-width', 2)
+                .on('mouseover', function(event, d, i) {
+                    d3.select(this).attr('opacity', 0.8);
+                    let prev = i > 0 ? chartData[i-1] : null;
+                    let diff = prev ? d.power - prev.power : null;
+                    let diffStr = '';
+                    if (diff !== null) {
+                        let arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '→');
+                        let color = diff > 0 ? 'green' : (diff < 0 ? 'red' : '#888');
+                        diffStr = `<br><span style='color:${color}'>${arrow} ${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:2})} W vs. previous</span>`;
+                    }
+                    showTooltip(event, `Date: ${d.date}<br>Power: ${d.power.toLocaleString(undefined, {maximumFractionDigits:2})} W${diffStr}`);
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('opacity', 1);
+                    hideTooltip();
+                })
+                .transition()
+                .duration(800)
+                .delay((d, i) => i * 50)
+                .attr('y', d => yScale(d.power))
+                .attr('height', d => height - yScale(d.power));
+
+            // Add Y-axis label
+            svg.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('y', 0 - margin.left + 10)
+                .attr('x', 0 - (height / 2))
+                .attr('dy', '1em')
+                .style('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text('Power (W)');
+        }
+
+        function createVoltageStabilityChart() {
+            const container = d3.select('#energyChart');
+            container.selectAll('*').remove();
+
+            const margin = { top: 40, right: 160, bottom: 80, left: 90 };
+            const width = 650 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Group data by hour and part of day
+            const hourlyData = d3.group(filteredData, d => {
+                const time = d['time'] || d.time || '0:0';
+                const hour = parseInt(time.split(':')[0]) || 0;
+                return hour;
+            });
+
+            const partOfDay = (hour) => {
+                if (hour >= 0 && hour < 6) return 'Late Night';
+                if (hour >= 6 && hour < 12) return 'Morning';
+                if (hour >= 12 && hour < 17) return 'Afternoon';
+                if (hour >= 17 && hour < 21) return 'Evening';
+                return 'Night';
+            };
+
+            const chartData = Array.from(hourlyData, ([hour, values]) => ({
+                hour: hour,
+                voltage: d3.mean(values, d => {
+                    let val = d['Column1.power_metrics.voltage'];
+                    if (val === undefined || val === null || val === '') val = d.voltage;
+                    return parseFloat(val) || 0;
+                }),
+                partOfDay: partOfDay(hour)
+            })).sort((a, b) => a.hour - b.hour);
+
+            console.log('VoltageStabilityChart data:', chartData);
+            if (chartData.length === 0) return;
+
+            const xScale = d3.scaleLinear()
+                .domain([0, 23])
+                .range([0, width]);
+
+            const yScale = d3.scaleLinear()
+                .domain(d3.extent(chartData, d => d.voltage))
+                .range([height, 0]);
+
+            const colorScale = d3.scaleOrdinal()
+                .domain(['Late Night', 'Morning', 'Afternoon', 'Evening', 'Night'])
+                .range(['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']);
+
+            // Add grid lines
+            svg.append('g')
+                .attr('class', 'grid')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickSize(-height).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            svg.append('g')
+                .attr('class', 'grid')
+                .call(d3.axisLeft(yScale).tickSize(-width).tickFormat(''))
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0.3);
+
+            // Add axes
+            svg.append('g')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickFormat(d => d + ':00'))
+                .selectAll('text')
+                .style('font-size', '16px');
+
+            svg.append('g')
+                .call(d3.axisLeft(yScale))
+                .selectAll('text')
+                .style('font-size', '16px');
+
+            // Group data by part of day for multiple lines
+            const groupedData = d3.group(chartData, d => d.partOfDay);
+
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.hour))
+                .y(d => yScale(d.voltage))
+                .curve(d3.curveMonotoneX);
+
+            // Add lines for each part of day
+            groupedData.forEach((values, partOfDay) => {
+                svg.append('path')
+                    .datum(values)
+                    .attr('fill', 'none')
+                    .attr('stroke', colorScale(partOfDay))
+                    .attr('stroke-width', 5)
+                    .attr('d', line);
+
+                // Add dots
+                svg.selectAll(`.dot-${partOfDay.replace(/\s+/g, '')}`)
+                    .data(values)
+                    .enter().append('circle')
+                    .attr('class', `dot-${partOfDay.replace(/\s+/g, '')}`)
+                    .attr('cx', d => xScale(d.hour))
+                    .attr('cy', d => yScale(d.voltage))
+                    .attr('r', 8)
+                    .attr('fill', colorScale(partOfDay))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 3)
+                    .on('mouseover', function(event, d, i) {
+                        d3.select(this).attr('r', 12);
+                        let prev = i > 0 ? values[i-1] : null;
+                        let diff = prev ? d.voltage - prev.voltage : null;
+                        let diffStr = '';
+                        if (diff !== null) {
+                            let arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '→');
+                            let color = diff > 0 ? 'green' : (diff < 0 ? 'red' : '#888');
+                            diffStr = `<br><span style='color:${color}'>${arrow} ${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:2})} V vs. previous</span>`;
+                        }
+                        showTooltip(event, `Hour: ${d.hour}:00<br/>Voltage: ${d.voltage.toLocaleString(undefined, {maximumFractionDigits:2})} V${diffStr}`);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).attr('r', 8);
+                        hideTooltip();
+                    });
+            });
+
+            // Add legend
+            const legend = svg.append('g')
+                .attr('transform', `translate(${width + 40}, 20)`);
+
+            const legendItems = legend.selectAll('.legend-item')
+                .data(colorScale.domain())
+                .enter().append('g')
+                .attr('class', 'legend-item')
+                .attr('transform', (d, i) => `translate(0, ${i * 32})`);
+
+            legendItems.append('line')
+                .attr('x1', 0)
+                .attr('x2', 30)
+                .attr('y1', 0)
+                .attr('y2', 0)
+                .attr('stroke', colorScale)
+                .attr('stroke-width', 5);
+
+            legendItems.append('text')
+                .attr('x', 40)
+                .attr('y', 0)
+                .attr('dy', '0.35em')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text(d => d);
+
+            // Add Y-axis label
+            svg.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('y', 0 - margin.left + 10)
+                .attr('x', 0 - (height / 2))
+                .attr('dy', '1em')
+                .style('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text('Average Voltage (V)');
+
+            // Add X-axis label
+            svg.append('text')
+                .attr('transform', `translate(${width/2}, ${height + margin.bottom - 30})`)
+                .style('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#666')
+                .text('Hour of Day');
+        }
+
+        // Initialize with sample data
+        data = sampleData;
+        filteredData = [...data];
+        initializeDashboard();
+
+        // Add after let data = []; let filteredData = [];
+        if (!document.getElementById('d3-tooltip')) {
+            const tooltipDiv = document.createElement('div');
+            tooltipDiv.id = 'd3-tooltip';
+            tooltipDiv.style.position = 'fixed';
+            tooltipDiv.style.pointerEvents = 'none';
+            tooltipDiv.style.background = 'rgba(0,0,0,0.92)';
+            tooltipDiv.style.color = '#fff';
+            tooltipDiv.style.padding = '8px 14px';
+            tooltipDiv.style.borderRadius = '7px';
+            tooltipDiv.style.fontSize = '13px';
+            tooltipDiv.style.zIndex = 9999;
+            tooltipDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)';
+            tooltipDiv.style.maxWidth = '260px';
+            tooltipDiv.style.opacity = 0;
+            tooltipDiv.style.transition = 'opacity 0.15s';
+            document.body.appendChild(tooltipDiv);
+        }
+        function showTooltip(event, html) {
+            const tooltip = document.getElementById('d3-tooltip');
+            tooltip.innerHTML = html;
+            tooltip.style.opacity = 1;
+            let x = event.clientX + 16;
+            let y = event.clientY + 16;
+            if (x + tooltip.offsetWidth > window.innerWidth) x = window.innerWidth - tooltip.offsetWidth - 8;
+            if (y + tooltip.offsetHeight > window.innerHeight) y = window.innerHeight - tooltip.offsetHeight - 8;
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+        function hideTooltip() {
+            const tooltip = document.getElementById('d3-tooltip');
+            tooltip.style.opacity = 0;
+        }
+    </script>
+</body>
+</html>

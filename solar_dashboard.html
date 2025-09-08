@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Production Analytics Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, .dashboard-container, .kpi-card, .chart-title, .stat-item, .axis text, .legend, .tooltip {
+            font-family: 'Inter', Arial, sans-serif !important;
+        }
+
+        body {
+            background: var(--bg);
+            color: #333;
+            min-height: 100vh;
+        }
+
+        .dashboard-container {
+            padding: 32px 0;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .upload-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 3px dashed #3498db;
+            border-radius: 10px;
+            padding: 40px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #2980b9;
+            background: #e3f2fd;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            color: #3498db;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.2em;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .upload-subtext {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: transform 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .file-info {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .dashboard-content {
+            display: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 32px 24px 24px 24px;
+            margin-bottom: 32px;
+            transition: box-shadow 0.2s;
+        }
+
+        .chart-container:hover {
+            box-shadow: 0 8px 32px rgba(37,99,235,0.12);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 18px;
+        }
+
+        .wide-chart {
+            grid-column: 1 / -1;
+        }
+
+        .kpi-container {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .kpi-card {
+            background: var(--kpi-gradient);
+            color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            flex: 1;
+            margin: 10px;
+            min-width: 200px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 8px 32px rgba(37,99,235,0.15);
+        }
+
+        .kpi-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .kpi-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: #fff;
+            color: #222;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 0 15px 5px 0;
+        }
+
+        .legend-color {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #ddd;
+            shape-rendering: crispEdges;
+        }
+
+        .grid line {
+            stroke: #f0f0f0;
+            stroke-dasharray: 3,3;
+        }
+
+        .bar {
+            transition: all 0.3s ease;
+        }
+
+        .bar:hover {
+            opacity: 0.8;
+        }
+
+        .line {
+            fill: none;
+            stroke-width: 3;
+        }
+
+        .area {
+            opacity: 0.3;
+        }
+
+        .dot {
+            transition: all 0.3s ease;
+        }
+
+        .dot:hover {
+            r: 6;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #721c24;
+            display: none;
+        }
+
+        .data-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .data-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            text-align: center;
+        }
+
+        .stat-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+
+        :root {
+            --primary: #2563eb;
+            --secondary: #fbbf24;
+            --accent: #10b981;
+            --bg: #f8fafc;
+            --card-bg: #fff;
+            --shadow: 0 4px 24px rgba(37,99,235,0.08);
+            --kpi-gradient: linear-gradient(90deg, #6366f1 0%, #2563eb 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>☀️ Solar Production Analytics</h1>
+            <p>Advanced Dashboard for Solar Energy Performance Analysis</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" id="upload-area">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Upload Your Solar Data CSV File</div>
+                <div class="upload-subtext">Drag and drop your file here or click to browse</div>
+                <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                    Choose File
+                </button>
+                <input type="file" id="file-input" class="file-input" accept=".csv" />
+            </div>
+            
+            <div class="file-info" id="file-info"></div>
+            <div class="error-message" id="error-message"></div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Analyzing your data...</div>
+            </div>
+        </div>
+
+        <div class="dashboard-content" id="dashboard-content">
+            <div class="data-info" id="data-info">
+                <h3 style="margin-bottom: 15px; color: #2c3e50;">📊 Dataset Overview</h3>
+                <div class="data-stats" id="data-stats"></div>
+            </div>
+
+            <div class="kpi-container">
+                <div class="kpi-card">
+                    <div class="kpi-value" id="total-production">--</div>
+                    <div class="kpi-label">Total Production (kWh)</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-value" id="avg-production">--</div>
+                    <div class="kpi-label">Avg Daily Production</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-value" id="peak-production">--</div>
+                    <div class="kpi-label">Peak Production Day</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-value" id="avg-solar-radiation">--</div>
+                    <div class="kpi-label">Avg Solar Radiation</div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="chart-container wide-chart">
+                    <h3 class="chart-title">🔄 Solar Radiation vs Production Over Time</h3>
+                    <div id="time-series-chart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <h3 class="chart-title">📊 Average Energy Production by Season</h3>
+                    <div id="weather-chart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <h3 class="chart-title">🌡️ Temperature vs Production Correlation</h3>
+                    <div id="correlation-chart"></div>
+                </div>
+
+                <div class="chart-container wide-chart">
+                    <h3 class="chart-title">📈 Multi-Factor Analysis Dashboard</h3>
+                    <div id="multi-factor-chart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        let currentData = [];
+        let filteredData = [];
+        
+        // Color schemes
+        const colors = {
+            production: '#e74c3c',
+            solarRadiation: '#f39c12',
+            temperature: '#3498db',
+            humidity: '#2ecc71',
+            clear: '#f1c40f',
+            cloudy: '#95a5a6'
+        };
+
+        const weatherColors = {
+            'Clear': '#f1c40f',
+            'Cloudy': '#95a5a6',
+            'Sunny': '#f39c12',
+            'Rainy': '#3498db',
+            'Overcast': '#7f8c8d'
+        };
+
+        // Tooltip
+        const tooltip = d3.select('#tooltip');
+
+        // File upload handling
+        const fileInput = document.getElementById('file-input');
+        const uploadArea = document.getElementById('upload-area');
+        const fileInfo = document.getElementById('file-info');
+        const errorMessage = document.getElementById('error-message');
+        const loading = document.getElementById('loading');
+        const dashboardContent = document.getElementById('dashboard-content');
+
+        // Drag and drop functionality
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showError('Please upload a CSV file.');
+                return;
+            }
+
+            hideError();
+            showLoading();
+            
+            fileInfo.innerHTML = `
+                <strong>File:</strong> ${file.name}<br>
+                <strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB<br>
+                <strong>Last Modified:</strong> ${new Date(file.lastModified).toLocaleString()}
+            `;
+            fileInfo.style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    parseCSVData(e.target.result);
+                } catch (error) {
+                    hideLoading();
+                    showError('Error reading file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSVData(csvText) {
+            Papa.parse(csvText, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.errors.length > 0) {
+                        hideLoading();
+                        showError('Error parsing CSV: ' + results.errors[0].message);
+                        return;
+                    }
+
+                    try {
+                        currentData = processData(results.data);
+                        hideLoading();
+                        showDashboard();
+                    } catch (error) {
+                        hideLoading();
+                        showError('Error processing data: ' + error.message);
+                    }
+                }
+            });
+        }
+
+        function processData(rawData) {
+            const data = rawData.map(d => {
+                // Handle different possible column name variations
+                const dateField = d.Date || d.date || d.DATE;
+                const productionField = d['ProductionToday(kWh)'] || d.Production || d.production || d['Production(kWh)'] || 0;
+                const solarRadiationField = d['SolarRadiation(ALLSKY_SFC_SW_DWN)'] || d.SolarRadiation || d['Solar Radiation'] || 0;
+                const temperatureField = d['Temperature(T2M)'] || d.Temperature || d.temperature || d['Temperature(°C)'] || 0;
+                const humidityField = d['Humidity(RH2M)'] || d.Humidity || d.humidity || d['Humidity(%)'] || 0;
+                const weatherField = d.Weather || d.weather || d.WEATHER || 'Unknown';
+
+                return {
+                    date: new Date(dateField),
+                    year: new Date(dateField).getFullYear(),
+                    day: d.Day || new Date(dateField).toLocaleDateString('en-US', { weekday: 'long' }),
+                    month: d.Month || new Date(dateField).toLocaleDateString('en-US', { month: 'long' }),
+                    season: d.Season || getSeason(new Date(dateField)),
+                    weather: weatherField,
+                    solarRadiation: parseFloat(solarRadiationField) || 0,
+                    temperature: parseFloat(temperatureField) || 0,
+                    humidity: parseFloat(humidityField) || 0,
+                    precipitation: parseFloat(d.Precipitation || d.precipitation || 0),
+                    wind: parseFloat(d['Wind(WS10M)'] || d.Wind || d.wind || 0),
+                    production: parseFloat(productionField) || 0
+                };
+            }).filter(d => !isNaN(d.date.getTime())); // Filter out invalid dates
+
+            return data;
+        }
+
+        function getSeason(date) {
+            const month = date.getMonth();
+            if (month >= 2 && month <= 4) return 'Spring';
+            if (month >= 5 && month <= 7) return 'Summer';
+            if (month >= 8 && month <= 10) return 'Fall';
+            return 'Winter';
+        }
+
+        function showLoading() {
+            loading.style.display = 'block';
+        }
+
+        function hideLoading() {
+            loading.style.display = 'none';
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+
+        // Remove the filter section from the DOM if it exists
+        const filterSection = document.querySelector('.filter-section');
+        if (filterSection) {
+            filterSection.remove();
+        }
+
+        // Insert updateDataStats here
+        function updateDataStats() {
+            const data = filteredData.length ? filteredData : currentData;
+            const statsContainer = document.getElementById('data-stats');
+            const totalRecords = data.length;
+            const dateRange = d3.extent(data, d => d.date);
+            const uniqueWeatherConditions = [...new Set(data.map(d => d.weather))].length;
+            const dataCompleteness = (data.filter(d => d.production > 0).length / totalRecords * 100).toFixed(1);
+
+            statsContainer.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${totalRecords}</div>
+                    <div class="stat-label">Total Records</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${Math.ceil((dateRange[1] - dateRange[0]) / (1000 * 60 * 60 * 24))}</div>
+                    <div class="stat-label">Days Analyzed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${uniqueWeatherConditions}</div>
+                    <div class="stat-label">Weather Types</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${dataCompleteness}%</div>
+                    <div class="stat-label">Data Completeness</div>
+                </div>
+            `;
+        }
+
+        // Update showDashboard to use filteredData
+        function showDashboard() {
+            dashboardContent.style.display = 'block';
+            updateDataStats();
+            updateKPIs();
+            clearCharts();
+            createTimeSeriesChart();
+            renderSeasonChartWithDropdown();
+            createCorrelationChart();
+            createMultiFactorChart();
+            createHeatmapChart();
+        }
+
+        // Update KPIs: add Avg Humidity and Max Production Day (as date)
+        function updateKPIs() {
+            const data = filteredData.length ? filteredData : currentData;
+            const totalProduction = d3.sum(data, d => d.production);
+            const avgProduction = d3.mean(data, d => d.production);
+            const peakProduction = d3.max(data, d => d.production);
+            const peakDay = data.find(d => d.production === peakProduction)?.date;
+            const avgSolarRadiation = d3.mean(data, d => d.solarRadiation);
+            const avgHumidity = d3.mean(data, d => d.humidity);
+            document.getElementById('total-production').textContent = totalProduction.toFixed(2);
+            document.getElementById('avg-production').textContent = avgProduction.toFixed(2);
+            document.getElementById('peak-production').textContent = peakProduction.toFixed(2) + (peakDay ? ` (${peakDay.toLocaleDateString()})` : '');
+            document.getElementById('avg-solar-radiation').textContent = avgSolarRadiation.toFixed(2);
+            // Add humidity KPI if not present
+            let humidityKPI = document.getElementById('avg-humidity');
+            if (!humidityKPI) {
+                const kpi = document.createElement('div');
+                kpi.className = 'kpi-card';
+                kpi.innerHTML = `<div class="kpi-value" id="avg-humidity">--</div><div class="kpi-label">Avg Humidity</div>`;
+                document.querySelector('.kpi-container').appendChild(kpi);
+                humidityKPI = document.getElementById('avg-humidity');
+            }
+            humidityKPI.textContent = avgHumidity.toFixed(2);
+        }
+
+        function clearCharts() {
+            d3.selectAll('svg').remove();
+            d3.selectAll('.legend').remove();
+        }
+
+        // Time Series Chart
+        function createTimeSeriesChart() {
+            const data = filteredData && filteredData.length ? filteredData : currentData;
+            const container = d3.select('#time-series-chart');
+            container.selectAll('*').remove();
+            // Add rolling average toggle
+            const controlsDiv = container.append('div').style('margin-bottom', '10px');
+            controlsDiv.append('label')
+                .html(`<input type='checkbox' id='toggle-rolling' checked> Show 7-day Rolling Average`)
+                .style('font-weight', 'bold');
+            // Colors
+            const colorProduction = '#0072B2'; // blue
+            const colorSolar = '#E69F00'; // orange
+            // Rolling average helper
+            function rollingAvg(arr, key) {
+                return arr.map((d, i, a) => {
+                    const window = a.slice(Math.max(0, i-3), Math.min(a.length, i+4));
+                    return {...d, [`${key}_roll`]: d3.mean(window, x => x[key])};
+                });
+            }
+            let chartData = rollingAvg(rollingAvg(data, 'production'), 'solarRadiation');
+            // Chart setup
+            const margin = {top: 32, right: 120, bottom: 48, left: 60};
+            const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            // X and Y scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(chartData, d => d.date))
+                .range([0, width]);
+            const yScale = d3.scaleLinear()
+                .domain([
+                    0,
+                    d3.max(chartData, d => Math.max(d.production, d.solarRadiation))
+                ])
+                .range([height, 0]);
+            // Legend state
+            let showProduction = true, showSolar = true;
+            // Draw function
+            function draw(showRolling) {
+                g.selectAll('*').remove();
+                // Grid
+                g.append('g')
+                    .attr('class', 'grid')
+                    .call(d3.axisLeft(yScale)
+                        .tickSize(-width)
+                        .tickFormat('')
+                    );
+                // Raw lines
+                if (showSolar) {
+                    g.append('path')
+                        .datum(chartData)
+                        .attr('class', 'line line-solar')
+                        .attr('stroke', colorSolar)
+                        .attr('stroke-width', 1.5)
+                        .attr('fill', 'none')
+                        .attr('opacity', showRolling ? 0.3 : 1)
+                        .attr('d', d3.line()
+                            .x(d => xScale(d.date))
+                            .y(d => yScale(d.solarRadiation))
+                            .curve(d3.curveMonotoneX)
+                        );
+                }
+                if (showProduction) {
+                    g.append('path')
+                        .datum(chartData)
+                        .attr('class', 'line line-production')
+                        .attr('stroke', colorProduction)
+                        .attr('stroke-width', 1.5)
+                        .attr('fill', 'none')
+                        .attr('opacity', showRolling ? 0.3 : 1)
+                        .attr('d', d3.line()
+                            .x(d => xScale(d.date))
+                            .y(d => yScale(d.production))
+                            .curve(d3.curveMonotoneX)
+                        );
+                }
+                // Rolling average lines
+                if (showRolling && showSolar) {
+                    g.append('path')
+                        .datum(chartData)
+                        .attr('class', 'line line-solar-rolling')
+                        .attr('stroke', colorSolar)
+                        .attr('stroke-width', 3)
+                        .attr('fill', 'none')
+                        .attr('d', d3.line()
+                            .x(d => xScale(d.date))
+                            .y(d => yScale(d.solarRadiation_roll))
+                            .curve(d3.curveMonotoneX)
+                        );
+                    // Dots
+                    g.selectAll('.dot-solar')
+                        .data(chartData)
+                        .enter().append('circle')
+                        .attr('class', 'dot dot-solar')
+                        .attr('cx', d => xScale(d.date))
+                        .attr('cy', d => yScale(d.solarRadiation_roll))
+                        .attr('r', 2.5)
+                        .attr('fill', colorSolar)
+                        .attr('opacity', 0.7);
+                }
+                if (showRolling && showProduction) {
+                    g.append('path')
+                        .datum(chartData)
+                        .attr('class', 'line line-production-rolling')
+                        .attr('stroke', colorProduction)
+                        .attr('stroke-width', 3)
+                        .attr('fill', 'none')
+                        .attr('d', d3.line()
+                            .x(d => xScale(d.date))
+                            .y(d => yScale(d.production_roll))
+                            .curve(d3.curveMonotoneX)
+                        );
+                    // Dots
+                    g.selectAll('.dot-prod')
+                        .data(chartData)
+                        .enter().append('circle')
+                        .attr('class', 'dot dot-prod')
+                        .attr('cx', d => xScale(d.date))
+                        .attr('cy', d => yScale(d.production_roll))
+                        .attr('r', 2.5)
+                        .attr('fill', colorProduction)
+                        .attr('opacity', 0.7);
+                }
+                // Tooltip
+                const tooltip = d3.select('body').append('div')
+                    .attr('class', 'tooltip');
+                // Mouse interaction
+                svg.selectAll('.hover-rect').remove();
+                svg.append('rect')
+                    .attr('class', 'hover-rect')
+                    .attr('x', margin.left)
+                    .attr('y', margin.top)
+                    .attr('width', width)
+                    .attr('height', height)
+                    .attr('fill', 'none')
+                    .attr('pointer-events', 'all')
+                    .on('mousemove', function(event) {
+                        const [mx] = d3.pointer(event, this);
+                        const x0 = xScale.invert(mx - margin.left);
+                        const bisect = d3.bisector(d => d.date).left;
+                        const idx = bisect(chartData, x0, 1);
+                        const d0 = chartData[idx - 1];
+                        const d1 = chartData[idx];
+                        const d = (!d1 || (x0 - d0.date < d1.date - x0)) ? d0 : d1;
+                        // Highlight
+                        g.selectAll('.line').attr('stroke-opacity', 0.2);
+                        g.selectAll('.line-production, .line-production-rolling').attr('stroke-opacity', showProduction ? 1 : 0.2);
+                        g.selectAll('.line-solar, .line-solar-rolling').attr('stroke-opacity', showSolar ? 1 : 0.2);
+                        // Tooltip
+                        let html = `<strong>${d.date.toLocaleDateString()} (${d.date.toLocaleDateString('en-US', { weekday: 'short' })})</strong><br/>`;
+                        html += `<span style='color:${colorSolar}'>Solar Radiation:</span> ${d.solarRadiation.toFixed(2)}${showRolling ? ` (avg: ${d.solarRadiation_roll.toFixed(2)})` : ''}<br/>`;
+                        html += `<span style='color:${colorProduction}'>Production:</span> ${d.production.toFixed(2)}${showRolling ? ` (avg: ${d.production_roll.toFixed(2)})` : ''}<br/>`;
+                        if (d.weather) html += `<span style='color:#888'>Weather:</span> ${d.weather}<br/>`;
+                        tooltip.style('opacity', 1)
+                            .html(html)
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 10) + 'px');
+                    })
+                    .on('mouseleave', function() {
+                        g.selectAll('.line').attr('stroke-opacity', 1);
+                        tooltip.style('opacity', 0);
+                    });
+                // Axes
+                g.append('g')
+                    .attr('class', 'axis')
+                    .attr('transform', `translate(0,${height})`)
+                    .call(d3.axisBottom(xScale));
+                g.append('g')
+                    .attr('class', 'axis')
+                    .call(d3.axisLeft(yScale));
+                // Axis labels
+                svg.append('text')
+                    .attr('x', margin.left + width/2)
+                    .attr('y', margin.top + height + 40)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '16px')
+                    .attr('fill', '#222')
+                    .text('Date');
+                svg.append('text')
+                    .attr('x', 0)
+                    .attr('y', margin.top - 16)
+                    .attr('text-anchor', 'start')
+                    .attr('font-size', '16px')
+                    .attr('fill', '#222')
+                    .text('Value');
+                // Title
+                svg.select('.chart-title').remove();
+                svg.append('text')
+                    .attr('x', margin.left + width/2)
+                    .attr('y', 24)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '22px')
+                    .attr('font-weight', 'bold')
+                    .attr('fill', '#222')
+                    .text('Solar Radiation vs Production Over Time');
+                // Interactive legend
+                const legend = svg.append('g')
+                    .attr('transform', `translate(${width + margin.left + 10},${margin.top})`);
+                // Solar
+                const solarLegend = legend.append('g')
+                    .attr('class', 'legend-item legend-solar')
+                    .style('cursor', 'pointer')
+                    .on('click', function() {
+                        showSolar = !showSolar;
+                        draw(d3.select('#toggle-rolling').property('checked'));
+                    })
+                    .on('mouseover', function() {
+                        g.selectAll('.line').attr('stroke-opacity', 0.2);
+                        g.selectAll('.line-solar, .line-solar-rolling').attr('stroke-opacity', 1).attr('stroke-width', 4);
+                    })
+                    .on('mouseout', function() {
+                        g.selectAll('.line').attr('stroke-opacity', 1).attr('stroke-width', 1.5);
+                    });
+                solarLegend.append('rect')
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', 18)
+                    .attr('height', 3)
+                    .attr('fill', colorSolar);
+                solarLegend.append('text')
+                    .attr('x', 24)
+                    .attr('y', 6)
+                    .attr('font-size', '15px')
+                    .text('Solar Radiation');
+                // Production
+                const prodLegend = legend.append('g')
+                    .attr('class', 'legend-item legend-production')
+                    .attr('transform', 'translate(0,24)')
+                    .style('cursor', 'pointer')
+                    .on('click', function() {
+                        showProduction = !showProduction;
+                        draw(d3.select('#toggle-rolling').property('checked'));
+                    })
+                    .on('mouseover', function() {
+                        g.selectAll('.line').attr('stroke-opacity', 0.2);
+                        g.selectAll('.line-production, .line-production-rolling').attr('stroke-opacity', 1).attr('stroke-width', 4);
+                    })
+                    .on('mouseout', function() {
+                        g.selectAll('.line').attr('stroke-opacity', 1).attr('stroke-width', 1.5);
+                    });
+                prodLegend.append('rect')
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', 18)
+                    .attr('height', 3)
+                    .attr('fill', colorProduction);
+                prodLegend.append('text')
+                    .attr('x', 24)
+                    .attr('y', 6)
+                    .attr('font-size', '15px')
+                    .text('Production');
+            }
+            // Initial draw
+            draw(true);
+            // Rolling average toggle event
+            d3.select('#toggle-rolling').on('change', function() {
+                draw(this.checked);
+            });
+        }
+
+        // Add year dropdown above the bar chart section
+        function renderSeasonChartWithDropdown() {
+            const data = filteredData.length ? filteredData : currentData;
+            const container = d3.select('#weather-chart');
+            container.selectAll('*').remove();
+            // Create dropdown
+            const years = Array.from(new Set(data.map(d => d.year))).sort();
+            let selectedYear = 'all';
+            const dropdownDiv = container.append('div').style('margin-bottom', '16px');
+            dropdownDiv.append('label')
+                .attr('for', 'season-year-dropdown')
+                .style('font-weight', 'bold')
+                .text('Select Year: ');
+            const dropdown = dropdownDiv.append('select')
+                .attr('id', 'season-year-dropdown')
+                .style('margin-left', '8px');
+            dropdown.append('option').attr('value', 'all').text('All');
+            years.forEach(y => {
+                dropdown.append('option').attr('value', y).text(y);
+            });
+            dropdown.on('change', function() {
+                selectedYear = this.value;
+                drawSeasonCharts(selectedYear);
+            });
+            // Initial draw
+            drawSeasonCharts(selectedYear);
+            function drawSeasonCharts(selectedYear) {
+                container.selectAll('.season-chart-panel').remove();
+                const seasonOrder = ['Winter', 'Summer', 'Monsoon', 'Postmonsoon', 'Post-Monsoon'];
+                if (selectedYear === 'all') {
+                    // Group all data by season
+                    const seasonData = d3.rollup(data, v => d3.mean(v, d => d.production), d => d.season);
+                    let seasonArray = Array.from(seasonData, ([key, value]) => ({season: key, production: value}));
+                    seasonArray = seasonOrder
+                        .map(season => seasonArray.find(d => d.season === season))
+                        .filter(Boolean);
+                    // Create a div for the chart
+                    const chartDiv = container.append('div').attr('class', 'season-chart-panel').style('margin-bottom', '32px');
+                    // Chart title
+                    chartDiv.append('div')
+                        .attr('class', 'chart-title')
+                        .style('margin-bottom', '8px')
+                        .text('Average Energy Production by Season');
+                    // SVG for chart
+            const margin = {top: 20, right: 20, bottom: 60, left: 60};
+            const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+            const height = 300 - margin.top - margin.bottom;
+                    const svg = chartDiv.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            // Scales
+            const xScale = d3.scaleBand()
+                        .domain(seasonArray.map(d => d.season))
+                .range([0, width])
+                .padding(0.3);
+            const yScale = d3.scaleLinear()
+                        .domain([0, d3.max(seasonArray, d => d.production)])
+                .range([height, 0]);
+            // Axes
+            g.append('g')
+                .attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                        .call(d3.axisBottom(xScale));
+            g.append('g')
+                .attr('class', 'axis')
+                .call(d3.axisLeft(yScale));
+                    // Tooltip
+                    const tooltip = d3.select('body').append('div')
+                        .attr('class', 'tooltip');
+            // Bars
+            g.selectAll('.bar')
+                        .data(seasonArray)
+                .enter().append('rect')
+                .attr('class', 'bar')
+                        .attr('x', d => xScale(d.season))
+                .attr('width', xScale.bandwidth())
+                .attr('y', d => yScale(d.production))
+                .attr('height', d => height - yScale(d.production))
+                        .style('fill', d => d.season === 'Winter' ? '#e0e7ff' : d.season === 'Summer' ? '#8fd19e' : d.season === 'Monsoon' ? '#6c7ba6' : d.season === 'Postmonsoon' || d.season === 'Post-Monsoon' ? '#4e9ca6' : '#b0b7c3')
+                        .on('mouseover', function(event, d) {
+                            g.selectAll('.bar').style('opacity', 0.3);
+                            d3.select(this).style('opacity', 1);
+                    tooltip.style('opacity', 1)
+                        .html(`
+                                    <strong>${d.season} Season</strong><br/>
+                            Avg Production: ${d.production.toFixed(2)} kWh
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                        .on('mouseout', function() {
+                            g.selectAll('.bar').style('opacity', 1);
+                    tooltip.style('opacity', 0);
+                });
+                    // Value labels on top of each bar
+                    g.selectAll('.bar-label')
+                        .data(seasonArray)
+                        .enter().append('text')
+                        .attr('class', 'bar-label')
+                        .attr('x', d => xScale(d.season) + xScale.bandwidth() / 2)
+                        .attr('y', d => yScale(d.production) - 6)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '15px')
+                        .attr('fill', '#222')
+                        .text(d => d.production ? d.production.toFixed(2) : '');
+                    // Y axis label
+                    svg.append('text')
+                        .attr('x', margin.left - 40)
+                        .attr('y', margin.top - 10)
+                        .attr('text-anchor', 'start')
+                        .attr('font-size', '15px')
+                        .attr('fill', 'var(--primary)')
+                        .text('Production (kWh)');
+                    // X axis label
+                    svg.append('text')
+                        .attr('x', margin.left + width/2)
+                        .attr('y', margin.top + height + 50)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '15px')
+                        .attr('fill', '#222')
+                        .text('Season');
+                } else {
+                    // Show only the selected year
+                    const year = parseInt(selectedYear);
+                    const yearData = data.filter(d => d.year === year);
+                    const seasonData = d3.rollup(yearData, v => d3.mean(v, d => d.production), d => d.season);
+                    let seasonArray = Array.from(seasonData, ([key, value]) => ({season: key, production: value}));
+                    seasonArray = seasonOrder
+                        .map(season => seasonArray.find(d => d.season === season))
+                        .filter(Boolean);
+                    // Create a div for the chart
+                    const chartDiv = container.append('div').attr('class', 'season-chart-panel').style('margin-bottom', '32px');
+                    // Chart title
+                    chartDiv.append('div')
+                        .attr('class', 'chart-title')
+                        .style('margin-bottom', '8px')
+                        .text(`Average Energy Production by Season — ${year}`);
+                    // SVG for chart
+                    const margin = {top: 20, right: 20, bottom: 60, left: 60};
+                    const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+                    const height = 300 - margin.top - margin.bottom;
+                    const svg = chartDiv.append('svg')
+                        .attr('width', width + margin.left + margin.right)
+                        .attr('height', height + margin.top + margin.bottom);
+                    const g = svg.append('g')
+                        .attr('transform', `translate(${margin.left},${margin.top})`);
+                    // Scales
+                    const xScale = d3.scaleBand()
+                        .domain(seasonArray.map(d => d.season))
+                        .range([0, width])
+                        .padding(0.3);
+                    const yScale = d3.scaleLinear()
+                        .domain([0, d3.max(seasonArray, d => d.production)])
+                        .range([height, 0]);
+                    // Axes
+                    g.append('g')
+                        .attr('class', 'axis')
+                        .attr('transform', `translate(0,${height})`)
+                        .call(d3.axisBottom(xScale));
+                    g.append('g')
+                        .attr('class', 'axis')
+                        .call(d3.axisLeft(yScale));
+                    // Tooltip
+                    const tooltip = d3.select('body').append('div')
+                        .attr('class', 'tooltip');
+                    // Bars
+                    g.selectAll('.bar')
+                        .data(seasonArray)
+                        .enter().append('rect')
+                        .attr('class', 'bar')
+                        .attr('x', d => xScale(d.season))
+                        .attr('width', xScale.bandwidth())
+                        .attr('y', d => yScale(d.production))
+                        .attr('height', d => height - yScale(d.production))
+                        .style('fill', d => d.season === 'Winter' ? '#e0e7ff' : d.season === 'Summer' ? '#8fd19e' : d.season === 'Monsoon' ? '#6c7ba6' : d.season === 'Postmonsoon' || d.season === 'Post-Monsoon' ? '#4e9ca6' : '#b0b7c3')
+                        .on('mouseover', function(event, d) {
+                            g.selectAll('.bar').style('opacity', 0.3);
+                            d3.select(this).style('opacity', 1);
+                            tooltip.style('opacity', 1)
+                                .html(`
+                                    <strong>${d.season} Season</strong><br/>
+                                    Avg Production: ${d.production.toFixed(2)} kWh
+                                `)
+                                .style('left', (event.pageX + 10) + 'px')
+                                .style('top', (event.pageY - 10) + 'px');
+                        })
+                        .on('mouseout', function() {
+                            g.selectAll('.bar').style('opacity', 1);
+                            tooltip.style('opacity', 0);
+                        });
+                    // Value labels on top of each bar
+                    g.selectAll('.bar-label')
+                        .data(seasonArray)
+                        .enter().append('text')
+                        .attr('class', 'bar-label')
+                        .attr('x', d => xScale(d.season) + xScale.bandwidth() / 2)
+                        .attr('y', d => yScale(d.production) - 6)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '15px')
+                        .attr('fill', '#222')
+                        .text(d => d.production ? d.production.toFixed(2) : '');
+                    // Y axis label
+                    svg.append('text')
+                        .attr('x', margin.left - 40)
+                        .attr('y', margin.top - 10)
+                        .attr('text-anchor', 'start')
+                        .attr('font-size', '15px')
+                        .attr('fill', 'var(--primary)')
+                        .text('Production (kWh)');
+                    // X axis label
+                    svg.append('text')
+                        .attr('x', margin.left + width/2)
+                        .attr('y', margin.top + height + 50)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '15px')
+                        .attr('fill', '#222')
+                        .text('Season');
+                }
+            }
+        }
+
+        // Correlation Chart (scatter with outlier marking)
+        function createCorrelationChart() {
+            const data = filteredData.length ? filteredData : currentData;
+            const container = d3.select('#correlation-chart');
+            container.selectAll('*').remove();
+            const margin = {top: 20, right: 20, bottom: 60, left: 60};
+            const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+            const height = 300 - margin.top - margin.bottom;
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            // Outlier detection (IQR)
+            const prod = data.map(d => d.production);
+            const q1 = d3.quantile(prod, 0.25);
+            const q3 = d3.quantile(prod, 0.75);
+            const iqr = q3 - q1;
+            const lower = q1 - 1.5 * iqr;
+            const upper = q3 + 1.5 * iqr;
+            // Scales
+            const xScale = d3.scaleLinear()
+                .domain(d3.extent(data, d => d.solarRadiation))
+                .range([0, width]);
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.production)])
+                .range([height, 0]);
+            // Axes
+            g.append('g')
+                .attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale));
+            g.append('g')
+                .attr('class', 'axis')
+                .call(d3.axisLeft(yScale));
+            // Tooltip
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip');
+            // Scatter points
+            g.selectAll('.dot')
+                .data(data)
+                .enter().append('circle')
+                .attr('class', 'dot')
+                .attr('cx', d => xScale(d.solarRadiation))
+                .attr('cy', d => yScale(d.production))
+                .attr('r', 5)
+                .style('fill', d => (d.production < lower || d.production > upper) ? '#e74c3c' : '#2ecc71')
+                .style('stroke', d => (d.production < lower || d.production > upper) ? '#c0392b' : '#27ae60')
+                .style('opacity', 0.7)
+                .on('mouseover', function(event, d) {
+                    d3.selectAll('.dot').style('opacity', 0.2);
+                    d3.select(this).style('opacity', 1).attr('r', 8);
+                    tooltip.style('opacity', 1)
+                        .html(`
+                            <strong>${d.date.toLocaleDateString()}</strong><br/>
+                            Solar Radiation: ${d.solarRadiation.toFixed(2)}<br/>
+                            Production: ${d.production.toFixed(2)} kWh<br/>
+                            ${d.production < lower || d.production > upper ? '<span style=\'color:#e74c3c\'>Outlier</span>' : ''}
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.selectAll('.dot').style('opacity', 0.7).attr('r', 5);
+                    tooltip.style('opacity', 0);
+                });
+        }
+
+        // Multi-Factor Analysis Chart
+        function createMultiFactorChart() {
+            const data = filteredData && filteredData.length ? filteredData : currentData;
+            const container = d3.select('#multi-factor-chart');
+            container.selectAll('*').remove();
+            // Variables to plot
+            const variables = [
+                {key: 'production', label: 'Production (kWh)', color: '#e74c3c'},
+                {key: 'temperature', label: 'Temperature (°C)', color: '#3498db'},
+                {key: 'solarRadiation', label: 'Solar Radiation', color: '#f39c12'},
+                {key: 'humidity', label: 'Humidity (%)', color: '#10b981'},
+                {key: 'wind', label: 'Wind (m/s)', color: '#a259d9'}
+            ];
+            // Add checkboxes for toggling variables
+            const controlsDiv = container.append('div').attr('class', 'multi-factor-controls').style('margin-bottom', '10px');
+            variables.forEach(v => {
+                controlsDiv.append('label')
+                    .style('margin-right', '18px')
+                    .html(`<input type='checkbox' checked id='toggle-${v.key}'> ${v.label}`);
+            });
+            // Smoothing: 7-day rolling average for each variable
+            function rollingAvg(arr, key) {
+                return arr.map((d, i, a) => {
+                    const window = a.slice(Math.max(0, i-3), Math.min(a.length, i+4));
+                    return {...d, [key]: d3.mean(window, x => x[key])};
+                });
+            }
+            let smoothedData = data;
+            variables.forEach(v => {
+                smoothedData = rollingAvg(smoothedData, v.key);
+            });
+            // Chart setup
+            const margin = {top: 30, right: 120, bottom: 50, left: 60};
+            const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+            const height = 350 - margin.top - margin.bottom;
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            // X scale (time)
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(smoothedData, d => d.date))
+                .range([0, width]);
+            // Normalize each variable to [0,1]
+            const yScale = d3.scaleLinear().domain([0, 1]).range([height, 0]);
+            // Compute min/max for each variable for normalization
+            const minMax = {};
+            variables.forEach(v => {
+                const vals = smoothedData.map(row => row[v.key]);
+                minMax[v.key] = {min: d3.min(vals), max: d3.max(vals)};
+            });
+            const normalizedData = smoothedData.map(d => {
+                const nd = {date: d.date};
+                variables.forEach(v => {
+                    const min = minMax[v.key].min;
+                    const max = minMax[v.key].max;
+                    nd[v.key] = (d[v.key] - min) / (max - min);
+                });
+                return nd;
+            });
+            // Draw lines for each variable
+            const lineGroups = g.selectAll('.multi-factor-line-group')
+                .data(variables)
+                .enter().append('g')
+                .attr('class', d => `multi-factor-line-group line-${d.key}`);
+            lineGroups.append('path')
+                .attr('class', 'multi-factor-line')
+                .attr('stroke', d => d.color)
+                .attr('stroke-width', 2)
+                .attr('fill', 'none')
+                .attr('d', v => d3.line()
+                    .x(d => xScale(d.date))
+                    .y(d => yScale(d[v.key]))
+                    .curve(d3.curveMonotoneX)(normalizedData)
+                );
+            // Add dots for each variable for better tooltip interaction
+            lineGroups.each(function(v) {
+                d3.select(this).selectAll('.dot')
+                    .data(normalizedData)
+                    .enter().append('circle')
+                    .attr('class', 'dot')
+                    .attr('cx', d => xScale(d.date))
+                    .attr('cy', d => yScale(d[v.key]))
+                    .attr('r', 3)
+                    .attr('fill', v.color)
+                    .attr('opacity', 0.5)
+                    .on('mouseover', function(event, d) {
+                        d3.selectAll('.dot').attr('opacity', 0.1);
+                        d3.select(this).attr('opacity', 1).attr('r', 7);
+                        let html = `<strong>${d.date.toLocaleDateString()}</strong><br/>`;
+                        variables.forEach(vv => {
+                            if (d3.select(`#toggle-${vv.key}`).property('checked')) {
+                                html += `<span style='color:${vv.color}'>${vv.label}:</span> ${d[vv.key].toFixed(2)}<br/>`;
+                            }
+                        });
+                        tooltip.style('opacity', 1)
+                            .html(html)
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 10) + 'px');
+                    })
+                    .on('mouseout', function() {
+                        d3.selectAll('.dot').attr('opacity', 0.5).attr('r', 3);
+                        tooltip.style('opacity', 0);
+                    });
+            });
+            // Axes
+            g.append('g')
+                .attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(xScale));
+            g.append('g')
+                .attr('class', 'axis')
+                .call(d3.axisLeft(yScale));
+            // Legend with highlight on hover
+            const legend = svg.append('g')
+                .attr('transform', `translate(${width + margin.left + 20},${margin.top})`);
+            variables.forEach((v, i) => {
+                const legendRow = legend.append('g').attr('class', `legend-row legend-${v.key}`)
+                    .attr('transform', `translate(0,${i * 28})`)
+                    .style('cursor', 'pointer')
+                    .on('mouseover', function() {
+                        svg.selectAll('.multi-factor-line').attr('stroke-opacity', 0.1);
+                        svg.selectAll(`.line-${v.key} .multi-factor-line`).attr('stroke-opacity', 1).attr('stroke-width', 4);
+                    })
+                    .on('mouseout', function() {
+                        svg.selectAll('.multi-factor-line').attr('stroke-opacity', 1).attr('stroke-width', 2);
+                    });
+                legendRow.append('rect')
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', 20)
+                    .attr('height', 20)
+                    .attr('fill', v.color);
+                legendRow.append('text')
+                    .attr('x', 28)
+                    .attr('y', 15)
+                    .attr('font-size', '14px')
+                    .text(v.label);
+            });
+            // Checkbox toggling
+            variables.forEach(v => {
+                d3.select(`#toggle-${v.key}`).on('change', function() {
+                    const checked = this.checked;
+                    svg.selectAll(`.line-${v.key}`).style('display', checked ? null : 'none');
+                    svg.selectAll(`.legend-${v.key}`).style('opacity', checked ? 1 : 0.3);
+                });
+            });
+            // Tooltip for all variables at hovered date (background mousemove)
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('pointer-events', 'none');
+            svg.append('rect')
+                .attr('x', margin.left)
+                .attr('y', margin.top)
+                .attr('width', width)
+                .attr('height', height)
+                .attr('fill', 'none')
+                .attr('pointer-events', 'all')
+                .on('mousemove', function(event) {
+                    const [mx] = d3.pointer(event, this);
+                    const x0 = xScale.invert(mx - margin.left);
+                    const bisect = d3.bisector(d => d.date).left;
+                    const idx = bisect(normalizedData, x0, 1);
+                    const d0 = normalizedData[idx - 1];
+                    const d1 = normalizedData[idx];
+                    const d = (!d1 || (x0 - d0.date < d1.date - x0)) ? d0 : d1;
+                    let html = `<strong>${d.date.toLocaleDateString()}</strong><br/>`;
+                    variables.forEach(v => {
+                        if (d3.select(`#toggle-${v.key}`).property('checked')) {
+                            html += `<span style='color:${v.color}'>${v.label}:</span> ${d[v.key].toFixed(2)}<br/>`;
+                        }
+                    });
+                    tooltip.style('opacity', 1)
+                        .html(html)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseleave', function() {
+                    tooltip.style('opacity', 0);
+                });
+        }
+
+        // Heatmap: Month vs Avg Production
+        function createHeatmapChart() {
+            const data = filteredData.length ? filteredData : currentData;
+            const container = d3.select('#multi-factor-chart');
+            d3.select('#heatmap-month').remove();
+            // --- Data prep ---
+            const monthOrder = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            const grouped = d3.rollup(data, v => d3.mean(v, d => d.production), d => d.year, d => d.month);
+            const years = Array.from(grouped.keys()).sort();
+            const months = monthOrder.filter(m => data.some(d => d.month === m));
+            const matrix = years.map(y => months.map(m => grouped.get(y)?.get(m) ?? null));
+            // --- Layout ---
+            const margin = {top: 160, right: 80, bottom: 120, left: 160};
+            const cellW = 100, cellH = 80;
+            const cellPad = 22;
+            const width = Math.max(1000, cellW * months.length);
+            const height = cellH * years.length;
+            const svg = container.append('svg')
+                .attr('id', 'heatmap-month')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom + 40);
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            // --- Color scale ---
+            const allVals = matrix.flat().filter(x => x !== null);
+            const color = d3.scaleSequential(d3.interpolatePlasma)
+                .domain([d3.min(allVals), d3.max(allVals)]);
+            // --- Color legend bar (moved above grid) ---
+            const legendW = 320, legendH = 28;
+            const legendX = margin.left + width/2 - legendW/2 - margin.left;
+            const legendY = -120;
+            const defs = svg.append('defs');
+            const gradient = defs.append('linearGradient')
+                .attr('id', 'heatmap-gradient')
+                .attr('x1', '0%').attr('x2', '100%')
+                .attr('y1', '0%').attr('y2', '0%');
+            for (let i = 0; i <= 100; i++) {
+                gradient.append('stop')
+                    .attr('offset', `${i}%`)
+                    .attr('stop-color', d3.interpolatePlasma(i/100));
+            }
+            svg.append('rect')
+                .attr('x', legendX)
+                .attr('y', legendY)
+                .attr('width', legendW)
+                .attr('height', legendH)
+                .attr('rx', 14)
+                .attr('fill', 'url(#heatmap-gradient)');
+            // Legend min/max labels
+            svg.append('text')
+                .attr('x', legendX)
+                .attr('y', legendY + legendH + 28)
+                .attr('text-anchor', 'start')
+                .attr('font-size', '22px')
+                .attr('fill', '#222')
+                .text(d3.min(allVals).toFixed(1));
+            svg.append('text')
+                .attr('x', legendX + legendW)
+                .attr('y', legendY + legendH + 28)
+                .attr('text-anchor', 'end')
+                .attr('font-size', '22px')
+                .attr('fill', '#222')
+                .text(d3.max(allVals).toFixed(1));
+            svg.append('text')
+                .attr('x', legendX + legendW/2)
+                .attr('y', legendY + legendH + 28)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '22px')
+                .attr('fill', '#222')
+                .text('Avg Production (kWh)');
+            // --- Cells ---
+            years.forEach((y, i) => {
+                months.forEach((m, j) => {
+                    const val = matrix[i][j];
+                    const cell = g.append('rect')
+                        .attr('x', j * cellW)
+                        .attr('y', i * cellH)
+                        .attr('width', cellW - cellPad)
+                        .attr('height', cellH - cellPad)
+                        .attr('rx', 24)
+                        .attr('ry', 24)
+                        .attr('fill', val !== null ? color(val) : '#f3f3f3')
+                        .attr('stroke', '#fff')
+                        .attr('stroke-width', 2)
+                        .style('filter', 'drop-shadow(0 1px 2px #0001)')
+                        .style('cursor', val !== null ? 'pointer' : 'default')
+                        .on('mouseover', function(event) {
+                            if (val === null) return;
+                            d3.select(this)
+                                .transition().duration(120)
+                                .attr('stroke', '#222')
+                                .attr('stroke-width', 3)
+                                .attr('filter', 'drop-shadow(0 2px 8px #0002)');
+                            tooltip.style('opacity', 1)
+                                .html(`<div style='font-weight:bold;font-size:1.4em;margin-bottom:2px;'>${y} - ${m}</div><div>Avg Production: <span style='color:#E69F00;font-weight:bold;'>${val.toFixed(2)}</span> kWh</div>`)
+                                .style('left', (event.pageX + 15) + 'px')
+                                .style('top', (event.pageY - 10) + 'px');
+                        })
+                        .on('mouseout', function() {
+                            d3.select(this)
+                                .transition().duration(120)
+                                .attr('stroke', '#fff')
+                                .attr('stroke-width', 2)
+                                .attr('filter', 'drop-shadow(0 1px 2px #0001)');
+                            tooltip.style('opacity', 0);
+                        });
+                    // Value label
+                    if (val !== null) {
+                        g.append('text')
+                            .attr('x', j * cellW + (cellW-cellPad)/2)
+                            .attr('y', i * cellH + (cellH-cellPad)/2 + 20)
+                            .attr('text-anchor', 'middle')
+                            .attr('font-size', '22px')
+                            .attr('font-weight', 'bold')
+                            .attr('fill', d3.lab(color(val)).l < 60 ? '#fff' : '#222')
+                            .text(val.toFixed(1));
+                    }
+                });
+            });
+            // --- Axis labels ---
+            // Month labels
+            g.selectAll('.monthLabel')
+                .data(months)
+                .enter()
+                .append('text')
+                .attr('x', (d, i) => i * cellW + (cellW-cellPad)/2)
+                .attr('y', -28)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '18px')
+                .attr('font-weight', 'bold')
+                .text(d => d);
+            // Year labels
+            g.selectAll('.yearLabel')
+                .data(years)
+                .enter()
+                .append('text')
+                .attr('x', -24)
+                .attr('y', (d, i) => i * cellH + (cellH-cellPad)/2 + 10)
+                .attr('text-anchor', 'end')
+                .attr('font-size', '18px')
+                .attr('font-weight', 'bold')
+                .text(d => d);
+            // Axis titles
+            svg.append('text')
+                .attr('x', margin.left + width/2)
+                .attr('y', margin.top - 100)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '32px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#222')
+                .text('Month vs Avg Production (Heatmap)');
+            svg.append('text')
+                .attr('x', margin.left + width/2)
+                .attr('y', margin.top + height + 80)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '28px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#222')
+                .text('Month');
+            svg.append('text')
+                .attr('x', margin.left - 120)
+                .attr('y', margin.top + height/2)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '28px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#222')
+                .attr('transform', `rotate(-90,${margin.left - 120},${margin.top + height/2})`)
+                .text('Year');
+            // --- Tooltip ---
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('pointer-events', 'none');
+        }
+
+        // Update chart title in HTML to 'Average Energy Production by Season'
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.chart-title').forEach(el => {
+                if (el.textContent.includes('Weather')) {
+                    el.textContent = 'Average Energy Production by Season';
+                }
+            });
+        });
+
+        // In the time series chart section, update the chart title
+        const timeSeriesTitle = document.querySelector('#time-series-chart').parentElement.querySelector('.chart-title');
+        if (timeSeriesTitle) {
+            timeSeriesTitle.textContent = 'Solar Radiation vs Production Over Time';
+        }
+    </script>
+</body>
+</html>
